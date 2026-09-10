@@ -6,7 +6,7 @@ services:
     name: vitola-hub-api
     runtime: node
     plan: free
-    buildCommand: npm ci && npm run build:prod
+    buildCommand: npm ci --include=dev && npm run build:prod
     startCommand: npx prisma migrate deploy --schema prisma/schema.prisma && npm run start:prod
     healthCheckPath: /api/v1/health
     envVars:
