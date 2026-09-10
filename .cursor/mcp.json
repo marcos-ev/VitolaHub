@@ -5,6 +5,12 @@
     },
     "neon": {
       "url": "https://mcp.neon.tech/mcp"
+    },
+    "cloudflare": {
+      "url": "https://mcp.cloudflare.com/mcp"
+    },
+    "render": {
+      "url": "https://mcp.render.com/mcp"
     }
   }
 }
