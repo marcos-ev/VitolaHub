@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "upstash": {
+      "url": "https://mcp.upstash.com/mcp?features=redis"
+    },
+    "neon": {
+      "url": "https://mcp.neon.tech/mcp"
+    }
+  }
+}
