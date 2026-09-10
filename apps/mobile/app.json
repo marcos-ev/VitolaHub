@@ -1,0 +1,82 @@
+{
+  "expo": {
+    "name": "Vitola Hub",
+    "slug": "vitola-hub",
+    "owner": "marcosevs-team",
+    "scheme": "vitolahub",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#14100B",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#14100B"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.vitolahub.mobile",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "Usamos a câmera para fotografar o charuto que você está fumando e identificar a anilha.",
+        "NSPhotoLibraryUsageDescription": "Permita acesso às fotos para postar o charuto que você está fumando."
+      }
+    },
+    "android": {
+      "softwareKeyboardLayoutMode": "resize",
+      "package": "com.vitolahub.mobile",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#14100B"
+      },
+      "permissions": [
+        "CAMERA",
+        "READ_MEDIA_IMAGES"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro",
+      "output": "static"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Usamos a câmera para fotografar o charuto que você está fumando."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Permita acesso às fotos para postar o charuto que você está fumando.",
+          "cameraPermission": "Usamos a câmera para fotografar o charuto ou atualizar sua foto de perfil."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Usamos sua localização para mostrar as charutarias parceiras mais próximas de você."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "demoMode": true,
+      "eas": {
+        "projectId": "5f441bac-79c9-4681-a4de-9c11796334e8"
+      }
+    }
+  }
+}

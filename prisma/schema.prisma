@@ -1,0 +1,753 @@
+// Schema completo da especificação (seção 4). Nasce completo de propósito para
+// evitar migrations destrutivas mais adiante. UUID v7 em todas as PKs, soft delete
+// via deleted_at, created_at/updated_at em todas as tabelas.
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [pg_trgm, unaccent, vector, citext]
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum AccountType {
+  PF
+  PJ
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
+enum SubscriptionStatus {
+  NONE
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+}
+
+enum CigarStatus {
+  APPROVED
+  PENDING
+  REJECTED
+}
+
+enum PostVisibility {
+  PUBLIC
+  FRIENDS
+}
+
+enum FollowStatus {
+  PENDING
+  ACCEPTED
+  BLOCKED
+}
+
+enum ShopPlan {
+  TRIAL
+  ACTIVE
+  CANCELED
+}
+
+enum LeadStatus {
+  OPEN
+  RESPONDED
+  CLOSED
+}
+
+enum SenderType {
+  USER
+  SHOP
+}
+
+enum ConversationStatus {
+  OPEN
+  CLOSED
+}
+
+enum SubscriptionPlan {
+  PREMIUM_MONTHLY
+  PREMIUM_YEARLY
+  SHOP_MONTHLY
+}
+
+enum PaymentProvider {
+  STRIPE
+}
+
+enum NotificationType {
+  FOLLOW_REQUEST
+  FOLLOW_ACCEPTED
+  LIKE
+  COMMENT
+  ACHIEVEMENT_UNLOCKED
+  TRIAL_ENDING
+  TRIAL_EXPIRED
+  SHOP_MESSAGE
+  INVITE_ACCEPTED
+}
+
+enum ReportEntityType {
+  POST
+  COMMENT
+  USER
+  SHOP
+  CONVERSATION
+}
+
+enum ReportStatus {
+  OPEN
+  REVIEWED
+  DISMISSED
+  ACTIONED
+}
+
+enum SupportTicketCategory {
+  TECHNICAL
+  SUGGESTION
+  COMPLAINT
+  OTHER
+}
+
+enum SupportTicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum SupportMessageAuthor {
+  USER
+  STAFF
+}
+
+enum RecognitionSource {
+  MODEL
+  MANUAL
+}
+
+// ---------------------------------------------------------------------------
+// Users & relationships
+// ---------------------------------------------------------------------------
+
+model User {
+  id                String      @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  email             String      @unique
+  passwordHash      String?     @map("password_hash")
+  username          String      @unique @db.Citext
+  displayName       String      @map("display_name")
+  bio               String?
+  city              String?
+  state             String?
+  avatarUrl         String?     @map("avatar_url")
+  birthDate         DateTime    @map("birth_date") @db.Date
+  /// CPF (PF) ou CNPJ (PJ), só dígitos.
+  taxId             String?     @unique @map("tax_id") @db.VarChar(14)
+  isPrivate         Boolean     @default(false) @map("is_private")
+  accountType       AccountType @default(PF) @map("account_type")
+  status            UserStatus  @default(ACTIVE)
+  isAdmin           Boolean     @default(false) @map("is_admin")
+
+  trialStartedAt      DateTime?          @map("trial_started_at")
+  trialEndsAt          DateTime?          @map("trial_ends_at")
+  subscriptionStatus   SubscriptionStatus @default(NONE) @map("subscription_status")
+  lastSeenAt           DateTime?          @map("last_seen_at")
+
+  followerCount     Int         @default(0) @map("follower_count")
+  followingCount    Int         @default(0) @map("following_count")
+  friendCount       Int         @default(0) @map("friend_count")
+
+  installationId    String?     @map("installation_id")
+  appleSub          String?     @unique @map("apple_sub")
+  googleSub         String?     @unique @map("google_sub")
+  expoPushToken     String?     @map("expo_push_token")
+
+  inviteCode        String?     @unique @map("invite_code")
+  invitedByUserId   String?     @map("invited_by_user_id") @db.Uuid
+
+  createdAt         DateTime    @default(now()) @map("created_at")
+  updatedAt         DateTime    @updatedAt @map("updated_at")
+  deletedAt         DateTime?   @map("deleted_at")
+
+  posts             Post[]              @relation("PostAuthor")
+  reviews           Review[]
+  cigarsSuggested   Cigar[]             @relation("CigarSuggestedBy")
+  followingEdges    Follow[]            @relation("Follower")
+  followerEdges     Follow[]            @relation("Followee")
+  likes             Like[]
+  comments          Comment[]
+  humidorItems      HumidorItem[]
+  userAchievements  UserAchievement[]
+  shop              Shop?
+  shopLeadsAsUser   ShopLead[]
+  invitesSent       Invite[]            @relation("Inviter")
+  inviteUsed        Invite?             @relation("InviteUsed")
+  subscriptions     Subscription[]
+  notifications     Notification[]      @relation("NotificationRecipient")
+  notificationsActed Notification[]     @relation("NotificationActor")
+  reportsFiled      Report[]            @relation("Reporter")
+  supportTickets    SupportTicket[]
+  refreshTokens     RefreshToken[]
+  conversations     Conversation[]
+  recognitionMatches RecognitionMatch[]
+  entitlement       Entitlement?
+  tasteStats        TasteStats?
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id          String    @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  tokenHash   String    @unique @map("token_hash")
+  replacedBy  String?   @map("replaced_by") @db.Uuid
+  revokedAt   DateTime? @map("revoked_at")
+  expiresAt   DateTime  @map("expires_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  user        User      @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model Follow {
+  followerId String       @map("follower_id") @db.Uuid
+  followeeId String       @map("followee_id") @db.Uuid
+  status     FollowStatus @default(PENDING)
+  createdAt  DateTime     @default(now()) @map("created_at")
+  updatedAt  DateTime     @updatedAt @map("updated_at")
+
+  follower   User @relation("Follower", fields: [followerId], references: [id])
+  followee   User @relation("Followee", fields: [followeeId], references: [id])
+
+  @@id([followerId, followeeId])
+  @@index([followeeId, status])
+  @@map("follows")
+}
+
+// ---------------------------------------------------------------------------
+// Catalog
+// ---------------------------------------------------------------------------
+
+model Brand {
+  id           String  @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  name         String  @unique
+  manufacturer String?
+  countryCode  String  @map("country_code")
+  logoUrl      String? @map("logo_url")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  cigars Cigar[]
+
+  @@map("brands")
+}
+
+model Cigar {
+  id               String      @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  brandId          String      @map("brand_id") @db.Uuid
+  name             String
+  line             String?
+  countryCode      String      @map("country_code")
+  vitola           String?
+  lengthMm         Decimal?    @map("length_mm") @db.Decimal(6, 2)
+  ringGauge        Int?        @map("ring_gauge")
+  strength         Int?
+  wrapper          String?
+  avgSmokeMinutes  Int?        @map("avg_smoke_minutes")
+  imageUrl         String?     @map("image_url")
+  status           CigarStatus @default(PENDING)
+  suggestedBy      String?     @map("suggested_by") @db.Uuid
+
+  ratingAvg   Decimal @default(0) @map("rating_avg") @db.Decimal(3, 2)
+  ratingCount Int     @default(0) @map("rating_count")
+
+  source    String? // origem da importação (planilha/fabricante)
+  sourceRef String? @map("source_ref")
+
+  // Gerado por trigger na migration (não gerenciado pelo Prisma — ver
+  // infra/postgres/cigars_search.sql). Unsupported para o diff engine do
+  // Prisma nunca tentar recriar a coluna/trigger.
+  searchVector Unsupported("tsvector")? @map("search_vector")
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  brand              Brand               @relation(fields: [brandId], references: [id])
+  suggestedByUser    User?               @relation("CigarSuggestedBy", fields: [suggestedBy], references: [id])
+  posts              Post[]
+  reviews            Review[]
+  humidorItems       HumidorItem[]
+  recognitionMatches RecognitionMatch[]
+
+  @@index([brandId])
+  @@map("cigars")
+}
+
+model FlavorNote {
+  id       String @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  name     String @unique
+  category String?
+
+  reviewFlavorNotes ReviewFlavorNote[]
+
+  @@map("flavor_notes")
+}
+
+// ---------------------------------------------------------------------------
+// Posts, reviews, social engagement
+// ---------------------------------------------------------------------------
+
+model Post {
+  id           String         @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  authorId     String         @map("author_id") @db.Uuid
+  cigarId      String?        @map("cigar_id") @db.Uuid
+  body         String?
+  visibility   PostVisibility @default(PUBLIC)
+  likeCount    Int            @default(0) @map("like_count")
+  commentCount Int            @default(0) @map("comment_count")
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  author   User        @relation("PostAuthor", fields: [authorId], references: [id])
+  cigar    Cigar?      @relation(fields: [cigarId], references: [id])
+  media    PostMedia[]
+  reviews  Review[]
+  likes    Like[]
+  comments Comment[]
+
+  @@index([authorId, createdAt(sort: Desc)])
+  @@map("posts")
+}
+
+model PostMedia {
+  id       String @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  postId   String @map("post_id") @db.Uuid
+  url      String
+  thumbUrl String @map("thumb_url")
+  width    Int
+  height   Int
+  position Int    @default(0)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  post Post @relation(fields: [postId], references: [id])
+
+  @@index([postId])
+  @@map("post_media")
+}
+
+model Review {
+  id                String   @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  userId            String   @map("user_id") @db.Uuid
+  cigarId           String   @map("cigar_id") @db.Uuid
+  postId            String?  @map("post_id") @db.Uuid
+  rating            Decimal  @db.Decimal(2, 1)
+  perceivedStrength Int      @map("perceived_strength")
+  smokeMinutes      Int?     @map("smoke_minutes")
+  draw              Int?
+  burn              Int?
+  body              String?
+  pairedWith        String?  @map("paired_with")
+  reviewDate        DateTime @default(now()) @map("review_date") @db.Date
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  user  User  @relation(fields: [userId], references: [id])
+  cigar Cigar @relation(fields: [cigarId], references: [id])
+  post  Post? @relation(fields: [postId], references: [id])
+
+  flavorNotes ReviewFlavorNote[]
+
+  @@unique([userId, cigarId, reviewDate])
+  @@index([cigarId])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("reviews")
+}
+
+model ReviewFlavorNote {
+  reviewId     String @map("review_id") @db.Uuid
+  flavorNoteId String @map("flavor_note_id") @db.Uuid
+
+  review     Review     @relation(fields: [reviewId], references: [id])
+  flavorNote FlavorNote @relation(fields: [flavorNoteId], references: [id])
+
+  @@id([reviewId, flavorNoteId])
+  @@map("review_flavor_notes")
+}
+
+model Like {
+  userId    String   @map("user_id") @db.Uuid
+  postId    String   @map("post_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+  post Post @relation(fields: [postId], references: [id])
+
+  @@id([userId, postId])
+  @@map("likes")
+}
+
+model Comment {
+  id       String  @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  postId   String  @map("post_id") @db.Uuid
+  authorId String  @map("author_id") @db.Uuid
+  body     String
+  parentId String? @map("parent_id") @db.Uuid
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  post   Post      @relation(fields: [postId], references: [id])
+  author User      @relation(fields: [authorId], references: [id])
+  parent Comment?  @relation("CommentReplies", fields: [parentId], references: [id])
+  replies Comment[] @relation("CommentReplies")
+
+  @@index([postId])
+  @@map("comments")
+}
+
+model HumidorItem {
+  id         String   @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  cigarId    String   @map("cigar_id") @db.Uuid
+  quantity   Int      @default(1)
+  acquiredAt DateTime @default(now()) @map("acquired_at")
+  note       String?
+  pricePaid  Decimal? @map("price_paid") @db.Decimal(10, 2)
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  user  User  @relation(fields: [userId], references: [id])
+  cigar Cigar @relation(fields: [cigarId], references: [id])
+
+  @@index([userId])
+  @@map("humidor")
+}
+
+// ---------------------------------------------------------------------------
+// Achievements
+// ---------------------------------------------------------------------------
+
+model Achievement {
+  id          String @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  code        String @unique
+  name        String
+  description String
+  icon        String
+  rule        Json
+  tier        Int    @default(1)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  userAchievements UserAchievement[]
+
+  @@map("achievements")
+}
+
+model UserAchievement {
+  userId        String   @map("user_id") @db.Uuid
+  achievementId String   @map("achievement_id") @db.Uuid
+  unlockedAt    DateTime @default(now()) @map("unlocked_at")
+
+  user        User        @relation(fields: [userId], references: [id])
+  achievement Achievement @relation(fields: [achievementId], references: [id])
+
+  @@id([userId, achievementId])
+  @@map("user_achievements")
+}
+
+// ---------------------------------------------------------------------------
+// Shops (charutarias parceiras)
+// ---------------------------------------------------------------------------
+
+model Shop {
+  id         String   @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  userId     String   @unique @map("user_id") @db.Uuid
+  cnpj       String   @unique
+  tradeName  String   @map("trade_name")
+  address    String
+  lat        Decimal  @db.Decimal(9, 6)
+  lng        Decimal  @db.Decimal(9, 6)
+  whatsapp   String?
+  instagram  String?
+  isVerified Boolean  @default(false) @map("is_verified")
+  plan       ShopPlan @default(TRIAL)
+  hours      Json?
+
+  greetingMessage   String? @map("greeting_message")
+  avgResponseSeconds Int?   @map("avg_response_seconds")
+  responseRate       Decimal? @map("response_rate") @db.Decimal(5, 2)
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  user          User           @relation(fields: [userId], references: [id])
+  leads         ShopLead[]
+  reviews       ShopReview[]
+  conversations Conversation[]
+
+  @@index([lat, lng])
+  @@map("shops")
+}
+
+model ShopLead {
+  id             String     @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  shopId         String     @map("shop_id") @db.Uuid
+  userId         String     @map("user_id") @db.Uuid
+  conversationId String?    @unique @map("conversation_id") @db.Uuid
+  source         String     @default("chat")
+  status         LeadStatus @default(OPEN)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  shop         Shop          @relation(fields: [shopId], references: [id])
+  user         User          @relation(fields: [userId], references: [id])
+  conversation Conversation? @relation(fields: [conversationId], references: [id])
+
+  @@index([shopId, createdAt(sort: Desc)])
+  @@map("shop_leads")
+}
+
+model ShopReview {
+  id      String  @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  shopId  String  @map("shop_id") @db.Uuid
+  userId  String  @map("user_id") @db.Uuid
+  rating  Decimal @db.Decimal(2, 1)
+  body    String?
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  shop Shop @relation(fields: [shopId], references: [id])
+
+  @@index([shopId])
+  @@map("shop_reviews")
+}
+
+model Conversation {
+  id            String              @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  shopId        String              @map("shop_id") @db.Uuid
+  userId        String              @map("user_id") @db.Uuid
+  lastMessageAt DateTime?           @map("last_message_at")
+  status        ConversationStatus  @default(OPEN)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  shop     Shop       @relation(fields: [shopId], references: [id])
+  user     User       @relation(fields: [userId], references: [id])
+  messages Message[]
+  lead     ShopLead?
+
+  @@unique([shopId, userId])
+  @@index([shopId, lastMessageAt(sort: Desc)])
+  @@map("conversations")
+}
+
+model Message {
+  id             String     @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  conversationId String     @map("conversation_id") @db.Uuid
+  senderType     SenderType @map("sender_type")
+  senderId       String     @map("sender_id") @db.Uuid
+  body           String
+  readAt         DateTime?  @map("read_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+
+  @@index([conversationId, createdAt])
+  @@map("messages")
+}
+
+// ---------------------------------------------------------------------------
+// Invites, subscriptions, notifications, reports
+// ---------------------------------------------------------------------------
+
+model Invite {
+  code       String    @id
+  inviterId  String    @map("inviter_id") @db.Uuid
+  usedBy     String?   @unique @map("used_by") @db.Uuid
+  usedAt     DateTime? @map("used_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  inviter    User  @relation("Inviter", fields: [inviterId], references: [id])
+  usedByUser User? @relation("InviteUsed", fields: [usedBy], references: [id])
+
+  @@index([inviterId])
+  @@map("invites")
+}
+
+model Subscription {
+  id                  String             @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  userId              String             @map("user_id") @db.Uuid
+  plan                SubscriptionPlan
+  status              SubscriptionStatus
+  provider            PaymentProvider    @default(STRIPE)
+  providerRef         String?            @unique @map("provider_ref")
+  currentPeriodEnd    DateTime?          @map("current_period_end")
+  cancelAtPeriodEnd   Boolean            @default(false) @map("cancel_at_period_end")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@map("subscriptions")
+}
+
+model Entitlement {
+  userId          String   @id @map("user_id") @db.Uuid
+  isPremium       Boolean  @default(false) @map("is_premium")
+  isTrial         Boolean  @default(false) @map("is_trial")
+  trialEndsAt     DateTime? @map("trial_ends_at")
+  premiumUntil    DateTime? @map("premium_until")
+  resolvedAt      DateTime @default(now()) @map("resolved_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("entitlements")
+}
+
+model Notification {
+  id         String           @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  userId     String           @map("user_id") @db.Uuid
+  type       NotificationType
+  actorId    String?          @map("actor_id") @db.Uuid
+  entityType String?          @map("entity_type")
+  entityId   String?          @map("entity_id") @db.Uuid
+  readAt     DateTime?        @map("read_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user  User  @relation("NotificationRecipient", fields: [userId], references: [id])
+  actor User? @relation("NotificationActor", fields: [actorId], references: [id])
+
+  @@index([userId, readAt, createdAt(sort: Desc)])
+  @@map("notifications")
+}
+
+model Report {
+  id           String           @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  reporterId   String           @map("reporter_id") @db.Uuid
+  entityType   ReportEntityType @map("entity_type")
+  entityId     String           @map("entity_id") @db.Uuid
+  reason       String
+  status       ReportStatus     @default(OPEN)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  reporter User @relation("Reporter", fields: [reporterId], references: [id])
+
+  @@map("reports")
+}
+
+/// Tickets de suporte do usuário (problema técnico, sugestão, reclamação).
+model SupportTicket {
+  id             String                @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  userId         String                @map("user_id") @db.Uuid
+  /// Número público sequencial (exibido como VH-4821).
+  number         Int                   @unique @default(autoincrement())
+  category       SupportTicketCategory
+  subject        String                @db.VarChar(60)
+  /// Texto inicial do chamado (espelhado na primeira mensagem da thread).
+  message        String
+  status         SupportTicketStatus   @default(OPEN)
+  adminNote      String?               @map("admin_note")
+  attachmentUrls String[]              @default([]) @map("attachment_urls")
+  clientMeta     Json?                 @map("client_meta")
+  /// Feedback pós-resolução: true = ajudou, false = não, null = ainda não respondeu.
+  helpful        Boolean?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user     User                   @relation(fields: [userId], references: [id])
+  messages SupportTicketMessage[]
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([status, createdAt(sort: Desc)])
+  @@map("support_tickets")
+}
+
+model SupportTicketMessage {
+  id         String               @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  ticketId   String               @map("ticket_id") @db.Uuid
+  authorType SupportMessageAuthor @map("author_type")
+  authorId   String?              @map("author_id") @db.Uuid
+  body       String               @db.VarChar(4000)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId, createdAt])
+  @@map("support_ticket_messages")
+}
+
+// ---------------------------------------------------------------------------
+// Recognition (Fase 4) & taste stats (Premium)
+// ---------------------------------------------------------------------------
+
+model RecognitionMatch {
+  id         String            @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  userId     String            @map("user_id") @db.Uuid
+  cigarId    String?           @map("cigar_id") @db.Uuid
+  cropUrl    String            @map("crop_url")
+  embedding  Unsupported("vector(512)")?
+  confidence Decimal?          @db.Decimal(5, 4)
+  source     RecognitionSource @default(MODEL)
+  confirmed  Boolean           @default(false)
+  imageHash  String            @map("image_hash")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user  User   @relation(fields: [userId], references: [id])
+  cigar Cigar? @relation(fields: [cigarId], references: [id])
+
+  @@index([imageHash])
+  @@map("recognition_matches")
+}
+
+model TasteStats {
+  userId          String   @id @map("user_id") @db.Uuid
+  avgStrength     Decimal? @map("avg_strength") @db.Decimal(3, 2)
+  topFlavorNotes  Json?    @map("top_flavor_notes")
+  countriesTried  Json?    @map("countries_tried")
+  reviewsPerMonth Json?    @map("reviews_per_month")
+  computedAt      DateTime @default(now()) @map("computed_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("taste_stats")
+}

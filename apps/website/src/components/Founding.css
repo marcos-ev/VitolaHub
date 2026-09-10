@@ -1,0 +1,117 @@
+.founding {
+  border-top: 1px solid var(--line-soft);
+  position: relative;
+}
+
+.founding__anchor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+
+.founding__panel {
+  padding: clamp(2rem, 4vw, 3.25rem);
+  border-radius: 28px;
+  border: 1px solid rgba(201, 162, 74, 0.4);
+  background:
+    radial-gradient(ellipse 55% 70% at 100% 0%, rgba(201, 162, 74, 0.16), transparent 55%),
+    radial-gradient(ellipse 40% 50% at 0% 100%, rgba(120, 70, 30, 0.18), transparent 50%),
+    linear-gradient(145deg, #1c1510, #120e0a);
+  min-width: 0;
+  overflow: hidden;
+  box-shadow: 0 0 50px rgba(201, 162, 74, 0.06);
+}
+
+.founding__panel .section-title {
+  max-width: 22ch;
+}
+
+.founding__panel .section-lead {
+  max-width: 40rem;
+}
+
+.founding__grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 1.5rem 2rem;
+  margin-top: 1.75rem;
+  max-width: 42rem;
+}
+
+.founding__label {
+  margin: 0 0 0.65rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gold);
+  font-weight: 600;
+}
+
+.founding__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.founding__list li {
+  position: relative;
+  padding-left: 1.15rem;
+  color: var(--muted);
+  font-size: 0.98rem;
+  line-height: 1.4;
+}
+
+.founding__list li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.55em;
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: var(--gold);
+  opacity: 0.85;
+}
+
+.founding__list--compact li {
+  font-size: 0.95rem;
+}
+
+.founding__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1.85rem;
+}
+
+@media (max-width: 720px) {
+  .founding__grid {
+    grid-template-columns: 1fr;
+    gap: 1.35rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .founding__panel {
+    border-radius: 22px;
+    padding: 1.6rem 1.25rem;
+  }
+
+  .founding__panel .section-title {
+    max-width: none;
+  }
+
+  .founding__actions {
+    flex-direction: column;
+  }
+
+  .founding__actions .btn {
+    width: 100%;
+  }
+}
